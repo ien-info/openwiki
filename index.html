@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenWiki - လွတ်လပ်သော ဗဟုသုတစွယ်စုံကျမ်း</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pyidaungsu&display=swap');
+body { font-family: 'Pyidaungsu', sans-serif; background-color: #f6f6f6; }
+.wiki-sidebar { width: 200px; padding: 20px; font-size: 0.85rem; min-height: 100vh; position: sticky; top: 0; }
+.main-container { background: white; border-left: 1px solid #a7d7f9; min-height: 100vh; padding: 20px 40px; width: 100%; }
+.tab { padding: 8px 15px; border: 1px solid transparent; cursor: pointer; margin-bottom: -1px; font-size: 0.9rem; color: #0645ad; }
+.tab.active { background: white; border: 1px solid #a7d7f9; border-bottom: 1px solid white; color: black; font-weight: bold; }
+.nav-link { color: #0645ad; cursor: pointer; display: block; padding: 2px 0; }
+.nav-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body class="flex">
+
+<aside class="wiki-sidebar space-y-6 shrink-0 bg-gray-50">
+<div class="mb-8 cursor-pointer" onclick="navigate('home')">
+<svg viewBox="0 0 200 200" width="60" height="60">
+<circle cx="100" cy="100" r="90" stroke="#0052CC" stroke-width="10" fill="none"/>
+<path d="M60 70C60 64.4772 64.4772 60 70 60H130V150H70C64.4772 150 60 145.523 60 140V70Z" fill="#0052CC"/>
+<rect x="75" y="80" width="50" height="8" rx="2" fill="white"/>
+<rect x="75" y="100" width="50" height="8" rx="2" fill="white"/>
+<rect x="75" y="120" width="30" height="8" rx="2" fill="white"/>
+</svg>
+<h1 class="text-xl font-serif mt-2 font-bold">OpenWiki</h1>
+</div>
+
+<nav class="space-y-4">
+<div id="dynamic-menu">
+<h3 class="font-bold border-b border-gray-300 pb-1 mb-2 text-gray-600">လမ်းညွှန်း</h3>
+</div>
+<div>
+<h3 class="font-bold border-b border-gray-300 pb-1 mb-2 text-gray-600">ရှာဖွေမှု</h3>
+<span class="nav-link" onclick="goToRandomPage()">ကျပန်းစာမျက်နှာ</span>
+</div>
+<div>
+<h3 class="font-bold border-b border-gray-300 pb-1 mb-2 text-gray-600">ပူးပေါင်းဆောင်ရွက်မှု</h3>
+<span class="nav-link" onclick="navigate('portals')">ပေါ်တယ်များ</span>
+<span class="nav-link" onclick="navigate('categories')">ကဏ္ဍကြည့်ရန်</span>
+<span class="nav-link" onclick="navigate('new-article')">ဆောင်းပါးအသစ်</span>
+</div>
+</nav>
+</aside>
+
+<div class="flex-1 main-container">
+<div class="flex flex-wrap justify-between items-end mb-6 gap-4 border-b border-blue-200">
+<div class="tabs flex">
+<div id="tab-read" class="tab active" onclick="switchTab('read')">ဖတ်ရန်</div>
+<div id="tab-edit" class="tab" onclick="switchTab('edit')">ပြင်ဆင်ရန်</div>
+<div id="tab-talk" class="tab" onclick="switchTab('talk')">ဆွေးနွေးရန်</div>
+<div id="tab-history" class="tab" onclick="switchTab('history')">ရာဇဝင်ကြည့်ရန်</div>
+</div>
+<div class="pb-2 flex items-center">
+<input type="text" id="searchInput" onkeypress="handleSearch(event)" placeholder="OpenWiki မှာ ရှာဖွေရန်" class="border p-1 text-sm w-48 sm:w-64 outline-none focus:border-blue-400">
+<button onclick="performSearch()" class="bg-gray-100 border px-3 py-1 text-sm border-gray-300 border-l-0 hover:bg-gray-200">ရှာရန်</button>
+</div>
+</div>
+<div id="content-body" class="max-w-4xl prose prose-blue"></div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://xggmkirkpduqlgptexqg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnZ21raXJrcGR1cWxncHRleHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjk1NDAsImV4cCI6MjA5MTYwNTU0MH0.Y4tPQN2wYxvgDW7SPNLJo0ec8n2zh2mxsa9RLmAO1qA';
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentView = 'home';
+let currentTab = 'read';
+const reservedTitles = ["ပင်မစာမျက်နှာ", "အကြောင်း", "အကူအညီ", "မူပိုင်ခွင့်", "မူဝါဒ", "စည်းကမ်းချက်များ", "ဆောင်းပါးလမ်းညွှန်", "လမ်းညွှန်", "သတိပြုရန်"];
+
+let pages = {
+'new-article': {
+title: 'ဆောင်းပါးအသစ် ဖန်တီးပါ',
+content: `
+<div class="bg-gray-50 p-6 rounded-lg border border-dashed border-blue-300 space-y-4">
+<div class="flex gap-4 p-2 bg-white rounded border">
+<label class="cursor-pointer"><input type="radio" name="pType" value="article" checked> ဆောင်းပါး</label>
+<label class="cursor-pointer"><input type="radio" name="pType" value="portal"> ပေါ်တယ်</label>
+<label class="cursor-pointer"><input type="radio" name="pType" value="category"> ကဏ္ဍ</label>
+</div>
+<input type="text" id="postTitle" placeholder="ခေါင်းစဉ်" class="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-400">
+<textarea id="postContent" rows="10" placeholder="အကြောင်းအရာ..." class="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-400 font-mono"></textarea>
+<input type="text" id="postRef" placeholder="ကိုးကားချက်" class="w-full border p-2 rounded outline-none">
+<button id="submitBtn" onclick="saveData('article')" class="bg-blue-700 text-white px-8 py-3 rounded font-bold w-full hover:bg-blue-800 transition">သိမ်းဆည်းမည်</button>
+</div>
+`
+},
+'categories': { title: 'ကဏ္ဍကြည့်ရန်', content: '<div id="cat-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>' },
+'portals': { title: 'ပေါ်တယ်များ', content: '<div id="port-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>' }
+};
+
+async function loadArticles() {
+try {
+const { data: articles } = await supabaseClient.from('articles-openwiki').select('*');
+if (articles) articles.forEach(a => {
+pages[a.title.toLowerCase().replace(/\s+/g, '-')] = { ...a };
+});
+
+const { data: portals } = await supabaseClient.from('portals-openwiki').select('*');
+if (portals) portals.forEach(p => {
+pages[`portal:${p.name.toLowerCase().replace(/\s+/g, '-')}`] = { title: `Portal:${p.name}`, content: p.description, created_at: p.created_at };
+});
+
+const { data: categories } = await supabaseClient.from('category-openwiki').select('*');
+if (categories) categories.forEach(c => {
+pages[`category:${c.name.toLowerCase().replace(/\s+/g, '-')}`] = { title: `Category:${c.name}`, content: `အမျိုးအစား: ${c.type}`, created_at: c.created_at };
+});
+
+updateSidebarMenu();
+render();
+} catch (err) { console.error("Data Load Error:", err.message); }
+}
+
+function updateSidebarMenu() {
+const menuContainer = document.getElementById('dynamic-menu');
+let menuHTML = '<h3 class="font-bold border-b border-gray-300 pb-1 mb-2 text-gray-600">လမ်းညွှန်း</h3>';
+let foundTitles = reservedTitles.filter(t => pages[t.toLowerCase().replace(/\s+/g, '-')]);
+foundTitles.sort((a, b) => a === "ပင်မစာမျက်နှာ" ? -1 : 1);
+foundTitles.forEach(title => {
+menuHTML += `<span class="nav-link" onclick="navigate('${title.toLowerCase().replace(/\s+/g, '-')}')">${title}</span>`;
+});
+menuContainer.innerHTML = menuHTML;
+}
+
+async function getIP() { try { const res = await fetch('https://api.ipify.org?format=json'); const data = await res.json(); return data.ip; } catch (e) { return "Unknown"; } }
+
+async function saveData(type) {
+const btn = document.getElementById('submitBtn');
+if (btn) btn.disabled = true;
+try {
+const uType = document.querySelector('input[name="pType"]:checked').value;
+const title = document.getElementById('postTitle').value.trim();
+const content = document.getElementById('postContent').value;
+const ref = document.getElementById('postRef').value;
+const ip = await getIP();
+
+if (!title || !content) { alert("ခေါင်းစဉ်နှင့် အကြောင်းအရာ ဖြည့်စွက်ပါ"); return; }
+
+if (uType === 'article') {
+const { error } = await supabaseClient.from('articles-openwiki').upsert([{ title, content, ref, last_editor_ip: ip, updated_at: new Date() }], { onConflict: 'title' });
+if (error) throw error;
+} else if (uType === 'portal') {
+const { error } = await supabaseClient.from('portals-openwiki').insert([{ name: title, description: content }]);
+if (error) throw error;
+} else if (uType === 'category') {
+const { error } = await supabaseClient.from('category-openwiki').insert([{ name: title, type: 'General' }]);
+if (error) throw error;
+}
+alert("သိမ်းဆည်းပြီးပါပြီ။");
+window.location.reload();
+} catch (err) { alert(err.message); } finally { if (btn) btn.disabled = false; }
+}
+
+function navigate(view) { currentView = view; currentTab = 'read'; render(); window.scrollTo(0, 0); }
+function switchTab(tab) { currentTab = tab; render(); }
+
+function goToRandomPage() {
+const allKeys = Object.keys(pages).filter(k => !['new-article', 'categories', 'portals'].includes(k));
+if (allKeys.length === 0) return;
+const randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+navigate(randomKey);
+}
+
+function render() {
+const body = document.getElementById('content-body');
+const pageData = pages[currentView];
+if (!pageData) { body.innerHTML = `<h1 class="text-3xl font-bold border-b pb-2">ရှာမတွေ့ပါ</h1>`; return; }
+
+document.querySelectorAll('.tab').forEach(t => t.classList.remove('active', 'border-blue-600', 'text-blue-600'));
+const activeTab = document.getElementById('tab-' + currentTab);
+if (activeTab) activeTab.classList.add('active', 'border-blue-600', 'text-blue-600');
+
+if (currentTab === 'read') {
+body.innerHTML = `
+<h1 class="text-3xl font-serif font-bold border-b pb-2 mb-4">${pageData.title || currentView}</h1>
+<div class="prose max-w-none text-gray-800 leading-relaxed">${pageData.content}</div>
+`;
+
+if (currentView === 'categories') {
+body.innerHTML += pages['categories'].content;
+const grid = document.getElementById('cat-grid');
+const cats = Object.keys(pages).filter(k => k.startsWith('category:'));
+if(grid) grid.innerHTML = cats.map(k => `<div onclick="navigate('${k}')" class="p-3 border rounded bg-blue-50 hover:bg-blue-100 cursor-pointer text-blue-800 font-bold transition shadow-sm"><i class="fas fa-folder mr-2"></i> ${pages[k].title.replace('Category:', '')}</div>`).join('');
+}
+if (currentView === 'portals') {
+body.innerHTML += pages['portals'].content;
+const grid = document.getElementById('port-grid');
+const ports = Object.keys(pages).filter(k => k.startsWith('portal:'));
+if(grid) grid.innerHTML = ports.map(k => `<div onclick="navigate('${k}')" class="p-4 border-2 border-blue-200 rounded-lg hover:border-blue-500 cursor-pointer bg-white transition shadow-sm"><b><i class="fas fa-th-large mr-2 text-blue-600"></i>${pages[k].title.replace('Portal:', '')}</b><p class="text-xs text-gray-500 mt-2 italic">OpenWiki Portal စာမျက်နှာ</p></div>`).join('');
+}
+} else if (currentTab === 'edit') {
+body.innerHTML = `<h1 class="text-3xl font-bold border-b pb-2 mb-4">ပြင်ဆင်ရန်</h1><textarea id="editContent" class="w-full border p-4 h-80 font-mono outline-none focus:ring-2 ring-blue-300 rounded">${pageData.content}</textarea><button onclick="saveData('edit')" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">သိမ်းမည်</button>`;
+} else {
+body.innerHTML = `<h1 class="text-3xl font-bold border-b pb-2">ရာဇဝင်</h1><p class="text-gray-500 mt-4">ဤစာမျက်နှာအတွက် မှတ်တမ်းများ မရှိသေးပါ။</p>`;
+}
+}
+
+function handleSearch(e) { if (e.key === 'Enter') performSearch(); }
+async function performSearch() {
+const q = document.getElementById('searchInput').value.trim().toLowerCase();
+const key = Object.keys(pages).find(k => pages[k].title?.toLowerCase().includes(q));
+if (key) navigate(key); else alert("ရှာမတွေ့ပါ။");
+}
+
+window.onload = async () => { await loadArticles(); };
+</script>
+</body>
+</html>
